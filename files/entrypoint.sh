@@ -4,6 +4,16 @@
 WSPATH=${WSPATH:-'argo'}
 UUID=${UUID:-'de04add9-5c68-8bab-950c-08cd5320df18'}
 
+# 其他Paas保活
+PAAS1=
+PAAS2=
+PAAS3=
+
+# koyeb账号保活
+KOYEB_ACCOUNT=
+KOYEB_PASSWORD=
+
+
 generate_config() {
   cat > config.json << EOF
 {
@@ -88,7 +98,7 @@ generate_config() {
                 }
             },
             "sniffing":{
-                "enabled":true,
+                "enabled":false,
                 "destOverride":[
                     "http",
                     "tls"
@@ -115,7 +125,7 @@ generate_config() {
                 }
             },
             "sniffing":{
-                "enabled":true,
+                "enabled":false,
                 "destOverride":[
                     "http",
                     "tls"
@@ -142,7 +152,7 @@ generate_config() {
                 }
             },
             "sniffing":{
-                "enabled":true,
+                "enabled":false,
                 "destOverride":[
                     "http",
                     "tls"
@@ -170,7 +180,7 @@ generate_config() {
                 }
             },
             "sniffing":{
-                "enabled":true,
+                "enabled":false,
                 "destOverride":[
                     "http",
                     "tls"
@@ -310,6 +320,74 @@ download_agent
 EOF
 }
 
+
+# Paas保活
+generate_keeplive() {
+  cat > paaslive.sh << EOF
+#!/usr/bin/env bash
+
+# 传参
+PAAS1=${PAAS1}
+PAAS2=${PAAS2}
+PAAS3=${PAAS3}
+
+# 判断变量并保活
+if [ -n "\${PAAS1}" ] && [ -n "\${PAAS2}" ] && [ -n "\${PAAS3}" ]; then
+  while true; do
+    curl \${PAAS1}
+    curl \${PAAS2}
+    curl \${PAAS3}
+    rm -rf /dev/null
+    sleep 240
+  done
+elif [ -n "\${PAAS1}" ] && [ -n "\${PAAS2}" ]; then
+  while true; do
+    curl \${PAAS1}
+    curl \${PAAS2}
+    rm -rf /dev/null
+    sleep 240
+  done
+elif [ -n "\${PAAS1}" ]; then
+  while true; do
+    curl \${PAAS1}
+    rm -rf /dev/null
+    sleep 240
+  done
+else
+  exit 1
+fi
+EOF
+}
+
+# koyeb保活
+generate_koyeb() {
+  cat > koyeb.sh << EOF
+#!/usr/bin/env bash
+
+# 传参
+KOYEB_ACCOUNT=${KOYEB_ACCOUNT}
+KOYEB_PASSWORD=${KOYEB_PASSWORD}
+
+# 两个变量不全则不运行保活
+check_variable() {
+  [[ -z "\${KOYEB_ACCOUNT}" || -z "\${KOYEB_ACCOUNT}" ]] && exit
+}
+
+# 开始保活
+run() {
+while true
+do
+  curl -sX POST https://app.koyeb.com/v1/account/login -H 'Content-Type: application/json' -d '{"email":"'"\${KOYEB_ACCOUNT}"'","password":"'"\${KOYEB_PASSWORD}"'"}'
+  rm -rf /dev/null
+  sleep $((60*60*24*5))
+done
+}
+check_variable
+run
+EOF
+}
+
+
 generate_pm2_file() {
   if [[ -n "${ARGO_AUTH}" && -n "${ARGO_DOMAIN}" ]]; then
     [[ $ARGO_AUTH =~ TunnelSecret ]] && ARGO_ARGS="tunnel --edge-ip-version auto --config tunnel.yml --url http://localhost:8080 run"
@@ -386,8 +464,12 @@ EOF
 
 generate_config
 generate_argo
+generate_keeplive
+generate_koyeb
 generate_nezha
 generate_pm2_file
 [ -e nezha.sh ] && bash nezha.sh
 [ -e argo.sh ] && bash argo.sh
+[ -e paaslive.sh ] && nohup bash paaslive.sh >/dev/null 2>&1 &
+[ -e koyeb.sh ] && nohup bash koyeb.sh >/dev/null 2>&1 &
 [ -e ecosystem.config.js ] && pm2 start
